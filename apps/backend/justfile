@@ -1,0 +1,13 @@
+set dotenv-load := true
+
+fmt:
+    black .
+
+fmt-check:
+    black --check .
+
+dev:
+    uvicorn app.main:app --reload
+
+ci:
+    just fmt-check

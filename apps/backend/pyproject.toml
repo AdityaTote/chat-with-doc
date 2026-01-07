@@ -1,0 +1,30 @@
+[project]
+name = "backend"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.13"
+dependencies = [
+    "langchain-chroma>=0.1.2",
+    "langchain-community>=0.3.0",
+    "sentence-transformers>=5.2.0",
+    "langchain-text-splitters>=0.3.0",
+    "boto3>=1.42.16",
+    "langchain-google-genai>=4.1.2",
+    "black>=25.12.0",
+    "fastapi>=0.128.0",
+    "bcrypt>=5.0.0",
+    "pyjwt>=2.10.1",
+    "alembic>=1.17.2",
+    "psycopg2-binary>=2.9.11",
+    "pydantic[email]>=2.12.5",
+    "langchain-huggingface>=1.2.0",
+    "python-multipart>=0.0.21",
+    "unstructured[pdf]>=0.18.24",
+    "unstructured[md]>=0.14.30",
+    "unstructured[docx]>=0.14.30",
+]
+
+[tool.black]
+line-length = 88
+target-version = ["py310"]
