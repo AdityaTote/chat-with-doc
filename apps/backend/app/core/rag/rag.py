@@ -18,6 +18,7 @@ from app.core.utils.exceptions.rag import (
 
 logger = get_logger(__name__)
 
+
 class Rag:
 
     @staticmethod
@@ -167,7 +168,12 @@ class Rag:
     @staticmethod
     def generate_session_name(session_token: str, db: Session) -> str:
 
-        doc = db.query(Document).join(SessionModel).filter(SessionModel.session_token == session_token).first()
+        doc = (
+            db.query(Document)
+            .join(SessionModel)
+            .filter(SessionModel.session_token == session_token)
+            .first()
+        )
         if not doc:
             raise ValueError(f"No document found for session token: {session_token}")
         result = docs.get(where={"doc_id": str(doc.id)}, limit=2)
@@ -175,7 +181,11 @@ class Rag:
         context = " ".join(documents) if documents else ""
         title = generate_session_name(context=context)
         print(title)
-        session = db.query(SessionModel).filter(SessionModel.session_token == session_token).first()
+        session = (
+            db.query(SessionModel)
+            .filter(SessionModel.session_token == session_token)
+            .first()
+        )
         if session:
             session.title = title
             db.commit()

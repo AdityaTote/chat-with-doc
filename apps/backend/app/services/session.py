@@ -29,6 +29,7 @@ CONTENT_TYPE_MAP = {
     "text/plain": ContentType.TEXT,
 }
 
+
 class SessionService:
 
     @staticmethod
@@ -88,7 +89,9 @@ class SessionService:
         Rag.store(RagStore(doc_id=int(doc.id), doc_key=str(doc.key)))
 
         # generate session name in background
-        background_tasks.add_task(Rag.generate_session_name, session_token=str(session.session_token), db=db)
+        background_tasks.add_task(
+            Rag.generate_session_name, session_token=str(session.session_token), db=db
+        )
 
         return CreateSessionResponse(
             doc_id=int(doc.id),
@@ -108,9 +111,7 @@ class SessionService:
         if not session:
             raise SessionNotFound(session_id=session_id)
 
-        input_data = RagQuery(
-            query=message, doc_id=int(session.document_id)
-        )
+        input_data = RagQuery(query=message, doc_id=int(session.document_id))
 
         # get last two chats (one chat of user and other of assistance)
         latest_chats = (
@@ -173,9 +174,11 @@ class SessionService:
         if not sessions:
             raise SessionsNotFound()
         return sessions
-    
+
     @staticmethod
-    def get_session(user_id: str, session_id: str, db: db_session, limit: int = 10, offset: int = 0):
+    def get_session(
+        user_id: str, session_id: str, db: db_session, limit: int = 10, offset: int = 0
+    ):
         # First, find the session by session_token (UUID string)
         session = (
             db.query(Session)
@@ -184,13 +187,15 @@ class SessionService:
         )
         if not session:
             raise SessionNotFound(session_id=session_id)
-        
-        # Then query chats using the session's integer id
-        chats = db.query(Chat).filter(
-            Chat.session_id == session.session_token
-        ).order_by(Chat.created_at.desc(), Chat.id.desc()).limit(limit).offset(offset).all()
 
-        return {
-            "session": session,
-            "chats": chats
-        }
+        # Then query chats using the session's integer id
+        chats = (
+            db.query(Chat)
+            .filter(Chat.session_id == session.session_token)
+            .order_by(Chat.created_at.desc(), Chat.id.desc())
+            .limit(limit)
+            .offset(offset)
+            .all()
+        )
+
+        return {"session": session, "chats": chats}

@@ -105,16 +105,13 @@ def get_sessions(req: Request, db: Session = Depends(get_db)):
     limit, offset = get_pagination(req)
 
     try:
-        data = SessionService.get_sessions(user_id=user["id"], db=db, limit=limit, offset=offset)
+        data = SessionService.get_sessions(
+            user_id=user["id"], db=db, limit=limit, offset=offset
+        )
         return ResponseSchema(
             success=True,
             message="sessions fetched successfully",
-            data={
-                "sessions": [
-                    model_to_dict(item)
-                    for item in data
-                ]
-            },
+            data={"sessions": [model_to_dict(item) for item in data]},
         )
     except DomainError as e:
         raise HTTPException(status_code=e.status_code, detail=e.message)
@@ -122,8 +119,11 @@ def get_sessions(req: Request, db: Session = Depends(get_db)):
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
 
+
 @session_router.get(
-    "/{session_id}", status_code=status.HTTP_200_OK, dependencies=[Depends(auth_middleware)]
+    "/{session_id}",
+    status_code=status.HTTP_200_OK,
+    dependencies=[Depends(auth_middleware)],
 )
 def get_session(req: Request, session_id: str, db: Session = Depends(get_db)):
     user = req.state.user
@@ -134,33 +134,32 @@ def get_session(req: Request, session_id: str, db: Session = Depends(get_db)):
 
     if not session_id:
         raise HTTPException(status_code=400, detail="session_id is required")
-    
+
     # get pagination
     limit, offset = get_pagination(req)
-    
+
     try:
-        data = SessionService.get_session(user_id=user["id"], session_id=session_id, db=db, limit=limit, offset=offset)
+        data = SessionService.get_session(
+            user_id=user["id"], session_id=session_id, db=db, limit=limit, offset=offset
+        )
         session_data = data["session"]
         chats_data = data["chats"]
-        
+
         session_dict = model_to_dict(session_data)
         if session_data.document:
             session_dict["document_name"] = session_data.document.title
             session_dict["document_url"] = session_data.document.url
-            
+
         return ResponseSchema(
             success=True,
             message="session fetched successfully",
             data={
                 "session": session_dict,
-                "chats": [
-                    model_to_dict(item)
-                    for item in chats_data
-                ]
+                "chats": [model_to_dict(item) for item in chats_data],
             },
         )
     except DomainError as e:
         raise HTTPException(status_code=e.status_code, detail=e.message)
-    
+
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")

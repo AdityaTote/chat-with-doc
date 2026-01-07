@@ -94,6 +94,7 @@ class RagQueryFailed(DomainError):
             status_code=500,
         )
 
+
 class ChatsNotFound(DomainError):
     code = "chats_not_found"
 
