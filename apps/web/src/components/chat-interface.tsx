@@ -2,6 +2,8 @@
 
 import { useState, useRef, useEffect } from "react";
 import { Send, User, Bot, Loader2 } from "lucide-react";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
@@ -121,7 +123,7 @@ export function ChatInterface({
             {documentName && (
               <div className="flex items-center gap-1 text-sm text-muted-foreground">
                   <span>Chatting with</span>
-                  <span className="font-medium text-foreground truncate max-w-[300px]">{documentName}</span>
+                  <span className="font-medium text-foreground truncate max-w-75">{documentName}</span>
               </div>
             )}
           </div>
@@ -149,22 +151,43 @@ export function ChatInterface({
                 )}
               >
                 {message.role === "assistant" && (
-                  <div className="flex-shrink-0 h-8 w-8 rounded-lg bg-muted flex items-center justify-center">
+                  <div className="shrink-0 h-8 w-8 rounded-lg bg-muted flex items-center justify-center">
                     <Bot className="h-4 w-4" />
                   </div>
                 )}
-                <div
-                  className={cn(
-                    "max-w-[85%] rounded-2xl px-4 py-3",
-                    message.role === "user"
-                      ? "bg-foreground text-background"
-                      : "bg-muted"
-                  )}
-                >
-                  <p className="text-sm whitespace-pre-wrap">{message.content}</p>
-                </div>
+                  <div
+                    className={cn(
+                      "max-w-[85%] rounded-2xl px-4 py-3",
+                      message.role === "user"
+                        ? "bg-foreground text-background"
+                        : "bg-muted"
+                    )}
+                  >
+                    <div className={cn(
+                      "prose prose-sm max-w-none break-words",
+                      message.role === "user" 
+                        ? "prose-invert" 
+                        : ""
+                    )}>
+                      <ReactMarkdown 
+                        remarkPlugins={[remarkGfm]}
+                        components={{
+                          pre: ({ ...props }) => (
+                            <div className="overflow-auto w-full my-2 bg-black/10 dark:bg-white/10 p-2 rounded-lg">
+                              <pre {...props} />
+                            </div>
+                          ),
+                          code: ({ ...props }) => (
+                            <code className="bg-black/10 dark:bg-white/10 rounded px-1 py-0.5" {...props} />
+                          ),
+                        }}
+                      >
+                        {message.content}
+                      </ReactMarkdown>
+                    </div>
+                  </div>
                 {message.role === "user" && (
-                  <div className="flex-shrink-0 h-8 w-8 rounded-lg bg-foreground flex items-center justify-center">
+                  <div className="shrink-0 h-8 w-8 rounded-lg bg-foreground flex items-center justify-center">
                     <User className="h-4 w-4 text-background" />
                   </div>
                 )}
@@ -174,7 +197,7 @@ export function ChatInterface({
 
           {isLoading && (
             <div className="flex gap-4 animate-fade-in">
-              <div className="flex-shrink-0 h-8 w-8 rounded-lg bg-muted flex items-center justify-center">
+              <div className="shrink-0 h-8 w-8 rounded-lg bg-muted flex items-center justify-center">
                 <Bot className="h-4 w-4" />
               </div>
               <div className="bg-muted rounded-2xl px-4 py-3">
@@ -195,14 +218,14 @@ export function ChatInterface({
               onChange={(e) => setInput(e.target.value)}
               onKeyDown={handleKeyDown}
               placeholder="Ask a question about your document..."
-              className="flex-1 min-h-[48px] max-h-32 px-4 py-3 rounded-xl border bg-transparent resize-none focus:outline-none focus:ring-2 focus:ring-ring"
+              className="flex-1 min-h-12 max-h-32 px-4 py-3 rounded-xl border bg-transparent resize-none focus:outline-none focus:ring-2 focus:ring-ring"
               rows={1}
               disabled={isLoading}
             />
             <Button
               type="submit"
               size="icon"
-              className="h-12 w-12 rounded-xl flex-shrink-0"
+              className="h-12 w-12 rounded-xl shrink-0"
               disabled={!input.trim() || isLoading}
             >
               <Send className="h-4 w-4" />

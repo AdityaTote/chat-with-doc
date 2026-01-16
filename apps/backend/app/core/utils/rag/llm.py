@@ -11,11 +11,12 @@ def llm_response(input_data: LlmQuery):
 INSTRUCTIONS:
 1. Answer questions based ONLY on the provided document context
 2. If the answer isn't in the context, clearly state "I don't have enough information in the provided documents to answer that"
-3. When answering, cite relevant parts of the context when possible
-4. Be concise but complete in your responses
-5. If asked about previous conversation, use the session history provided
-6. Stay professional and helpful in tone
-Remember: Stay within the document scope. Don't make assumptions beyond what's explicitly stated in the context."""
+3. Do NOT include citations or references to the context in your response (e.g., do not say 'Context: ...')
+4. Provide the answer directly without mentioning the source context.
+5. Be concise but complete in your responses
+6. If asked about previous conversation, use the session history provided
+7. Stay professional and helpful in tone
+8. Remember: Stay within the document scope. Don't make assumptions beyond what's explicitly stated in the context."""
     )
 
     # document context message which is related to user query

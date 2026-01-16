@@ -5,6 +5,7 @@ import { FileText, MessageSquare, Calendar, Loader2, FolderOpen } from "lucide-r
 import { Card } from "@/components/ui/card";
 import { useGetSessions } from "@/hooks/useSession";
 import type { Session } from "@/types/api";
+import { AxiosError } from "axios";
 
 export default function SessionsPage() {
   const { data, isLoading, error } = useGetSessions();
@@ -41,7 +42,7 @@ export default function SessionsPage() {
           </p>
         </div>
 
-        {error && (
+        {error && !(error instanceof AxiosError && error.response?.status === 404) && (
           <div className="p-4 rounded-lg bg-destructive/10 text-destructive mb-6">
             {error instanceof Error ? error.message : "Failed to load sessions"}
           </div>
@@ -72,7 +73,7 @@ export default function SessionsPage() {
               >
                 <Card className="p-4 hover:shadow-md transition-shadow cursor-pointer">
                   <div className="flex items-start gap-4">
-                    <div className="h-12 w-12 rounded-lg bg-muted flex items-center justify-center flex-shrink-0">
+                    <div className="h-12 w-12 rounded-lg bg-muted flex items-center justify-center shrink-0">
                       <FileText className="h-6 w-6" />
                     </div>
                     <div className="flex-1 min-w-0">
@@ -87,7 +88,7 @@ export default function SessionsPage() {
                         <span>{formatDate(session.created_at)}</span>
                       </div>
                     </div>
-                    <MessageSquare className="h-5 w-5 text-muted-foreground flex-shrink-0" />
+                    <MessageSquare className="h-5 w-5 text-muted-foreground shrink-0" />
                   </div>
                 </Card>
               </Link>

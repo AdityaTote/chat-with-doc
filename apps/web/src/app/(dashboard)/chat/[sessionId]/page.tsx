@@ -1,10 +1,11 @@
 "use client";
 
+import { Loader2 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
-import { ChatInterface } from "@/components/chat-interface";
+
 import type { ChatMessage } from "@/types/api";
-import { Loader2 } from "lucide-react";
+import { ChatInterface } from "@/components/chat-interface";
 import { useGetSession, useChat } from "@/hooks/useSession";
 
 export default function SessionChatPage() {
@@ -47,7 +48,7 @@ export default function SessionChatPage() {
         };
         setMessages((prev) => [...prev, errorMessage]);
       }
-    } catch (error) {
+    } catch {
       const errorMessage: ChatMessage = {
         role: "assistant",
         content: "Sorry, I encountered an error. Please try again.",

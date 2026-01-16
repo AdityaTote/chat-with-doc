@@ -180,7 +180,6 @@ class Rag:
         documents = result.get("documents") or []
         context = " ".join(documents) if documents else ""
         title = generate_session_name(context=context)
-        print(title)
         session = (
             db.query(SessionModel)
             .filter(SessionModel.session_token == session_token)
