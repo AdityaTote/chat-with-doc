@@ -1,12 +1,12 @@
+from datetime import datetime, timezone
+import logging
+
 from sqlalchemy.orm import Session
 
 from app.database.models.sessions import Session as SessionModel
-from app.core.utils.rag import load_document
-from app.core.utils.rag import chunk_text
-from app.core.utils.rag import generate_embeddings
+from app.core.utils.rag import loader, chunk_doc, generate_embeddings
 from app.core.chroma import docs
 from app.schemas.rag import RagStore, RagQuery, LlmQuery
-from app.core.logger import get_logger
 from app.core.utils.rag.llm import generate_session_name, llm_response
 from app.database.models.documents import Document
 from app.core.utils.exceptions.rag import (
@@ -15,22 +15,23 @@ from app.core.utils.exceptions.rag import (
     EmbeddingGenerationError,
     VectorStoreError,
 )
+from chromadb.api.types import Metadata
 
-logger = get_logger(__name__)
-
-
+# TODO: Add Hybrid search:
+#       - implement BM25 search for text-based retrieval
+#       - store the chunks to a relational database for text-based retrieval
 class Rag:
 
     @staticmethod
     def store(input_data: RagStore) -> bool:
         try:
             # load document from s3 with object key
-            doc = load_document(input_data.doc_key)
+            doc = loader.load(input_data.doc_key)
             if not doc:
                 raise DocumentLoadError(input_data.doc_key)
 
             # split the document into small chunks
-            chunk_data = chunk_text(doc)
+            chunk_data = chunk_doc(doc)
             if not chunk_data:
                 raise DocumentChunkingError(input_data.doc_key)
 
@@ -42,8 +43,14 @@ class Rag:
             chunk_ids = [
                 f"{input_data.doc_id}_chunk_{i}" for i in range(len(chunk_data))
             ]
-            metadatas = [
-                {"doc_id": str(input_data.doc_id)} for _ in range(len(chunk_data))
+            metadatas: list[Metadata] = [
+                {
+                    "doc_id": str(input_data.doc_id),
+                    "chunk_index": i,
+                    "created_at": datetime.now(timezone.utc).isoformat(),
+                    "doc_type": input_data.doc_type,
+                    } 
+                for i in range(len(chunk_data))
             ]
 
             # store the vector embedding in vector db
@@ -51,7 +58,7 @@ class Rag:
                 ids=chunk_ids, embeddings=vec, documents=chunk_data, metadatas=metadatas
             )
 
-            logger.info(
+            logging.info(
                 f"Successfully stored document: {input_data.doc_key} with {len(chunk_data)} chunks"
             )
             return True
@@ -62,10 +69,10 @@ class Rag:
             EmbeddingGenerationError,
             VectorStoreError,
         ) as e:
-            logger.error(f"error: {e.message}")
+            logging.error(f"error: {e.message}")
             raise
         except Exception as e:
-            logger.error(
+            logging.error(
                 f"Unexpected error storing document {input_data.doc_key}: {str(e)}",
                 exc_info=True,
             )
@@ -78,7 +85,7 @@ class Rag:
             if not input_data.query or not input_data.query.strip():
                 raise ValueError("Query cannot be empty")
 
-            logger.info(f"Processing query for document: {input_data.doc_id}")
+            logging.info(f"Processing query for document: {input_data.doc_id}")
 
             # convert query to vector embeddings
             try:
@@ -88,7 +95,7 @@ class Rag:
                         "Failed to generate query embeddings"
                     )
             except Exception as e:
-                logger.error(
+                logging.error(
                     f"Error generating embeddings for query: {str(e)}",
                     exc_info=True,
                 )
@@ -111,18 +118,20 @@ class Rag:
                     else []
                 )
 
+                
+
                 if not flattened_docs:
-                    logger.warning(
+                    logging.warning(
                         f"No documents found for query on doc_id: {input_data.doc_id}"
                     )
                 else:
-                    logger.info(
+                    logging.info(
                         f"Retrieved {len(flattened_docs)} document chunks for query"
                     )
             except VectorStoreError:
                 raise
             except Exception as e:
-                logger.error(
+                logging.error(
                     f"Error querying vector database: {str(e)}",
                     exc_info=True,
                 )
@@ -143,27 +152,93 @@ class Rag:
                 if not response:
                     raise ValueError("LLM returned empty response")
 
-                logger.info(
+                logging.info(
                     f"Successfully generated response for query on doc_id: {input_data.doc_id}"
                 )
                 return response
 
             except Exception as e:
-                logger.error(
+                logging.error(
                     f"Error generating LLM response: {str(e)}",
                     exc_info=True,
                 )
                 raise VectorStoreError(f"LLM response generation failed: {str(e)}")
 
         except (EmbeddingGenerationError, VectorStoreError, ValueError) as e:
-            logger.error(f"Query error: {str(e)}")
+            logging.error(f"Query error: {str(e)}")
             raise
         except Exception as e:
-            logger.error(
+            logging.error(
                 f"Unexpected error processing query for doc_id {input_data.doc_id}: {str(e)}",
                 exc_info=True,
             )
             raise VectorStoreError(f"Unexpected query error: {str(e)}")
+    
+    @staticmethod
+    def extract_text_from_doc(ans: str, doc_id: str):
+        try:
+            logging.info(f"Extracting text from document: {doc_id}")
+
+            # generate embeddings from answer
+            try:
+                ans_embed = generate_embeddings(chunk_data=[ans])
+                if not ans_embed:
+                    raise EmbeddingGenerationError(
+                        "Failed to generate embeddings from answer"
+                    )
+            except Exception as e:
+                logging.error(
+                    f"Error generating embeddings for answer: {str(e)}",
+                    exc_info=True,
+                )
+                raise EmbeddingGenerationError(f"Answer embedding failed: {str(e)}")
+
+            # query vector database
+            try:
+                result = docs.query(
+                    query_embeddings=ans_embed,
+                    n_results=2,
+                    where={"doc_id": doc_id}
+                )
+                if not result:
+                    raise VectorStoreError("No results returned from vector database")
+
+                documents = result.get("documents") or []
+                flattened_docs = (
+                    [str(doc) for sublist in documents for doc in sublist]
+                    if documents
+                    else []
+                )
+
+                if not flattened_docs:
+                    logging.warning(
+                        f"No documents found for extraction on doc_id: {doc_id}"
+                    )
+                else:
+                    logging.info(
+                        f"Retrieved {len(flattened_docs)} document chunks for extraction"
+                    )
+
+                return flattened_docs
+
+            except VectorStoreError:
+                raise
+            except Exception as e:
+                logging.error(
+                    f"Error querying vector database: {str(e)}",
+                    exc_info=True,
+                )
+                raise VectorStoreError(f"Vector database query failed: {str(e)}")
+
+        except (EmbeddingGenerationError, VectorStoreError, ValueError) as e:
+            logging.error(f"Extract text error: {str(e)}")
+            raise
+        except Exception as e:
+            logging.error(
+                f"Unexpected error extracting text for doc_id {doc_id}: {str(e)}",
+                exc_info=True,
+            )
+            raise VectorStoreError(f"Unexpected extraction error: {str(e)}")
 
     @staticmethod
     def generate_session_name(session_token: str, db: Session) -> str:

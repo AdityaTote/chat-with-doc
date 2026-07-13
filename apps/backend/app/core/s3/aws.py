@@ -10,13 +10,18 @@ ALLOWED_CONTENT_TYPES = {
     "text/markdown": ".md",
     "application/vnd.openxmlformats-officedocument.wordprocessingml.document": ".docx",
     "text/plain": ".txt",
+    "application/vnd.openxmlformats-officedocument.presentationml.presentation": ".pptx",
+    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": ".xlsx",
 }
 
 
 class S3Client:
     def __init__(self, bucket_name: str):
         self._bucket = bucket_name
-        self._client = boto3.client(
+        self._client = self._connect_client()
+
+    def _connect_client(self):
+        return boto3.client(
             "s3",
             aws_access_key_id=Config["Env"].aws_access_key,
             aws_secret_access_key=Config["Env"].aws_secret_key,

@@ -1,4 +1,4 @@
 from .llm import llm_response
-from .embedding import generate_embeddings, HuggingFaceAdapter
-from .loader import load_document
-from .text_splitter import chunk_text
+from .embedding import generate_embeddings, fast_embed
+from .loader import loader
+from .text_splitter import chunk_text, chunk_doc

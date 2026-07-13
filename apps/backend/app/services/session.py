@@ -1,6 +1,6 @@
 import uuid
 from fastapi import BackgroundTasks, UploadFile
-from sqlalchemy.orm import Session as db_session
+from sqlalchemy.orm import Session as db_session, joinedload
 
 from app.core.s3.aws import s3
 from app.database.models import Document, Session
@@ -11,7 +11,6 @@ from app.schemas.rag import RagQuery, RagStore
 from app.schemas.rag import History, Role as RagRole
 from app.database.models.documents import ContentType
 from app.core.utils.exceptions.session import (
-    ChatsNotFound,
     InvalidContentType,
     FileUploadFailed,
     DocumentSaveFailed,
@@ -66,7 +65,6 @@ class SessionService:
         try:
             db.commit()
             db.refresh(doc)
-            print("Saved document to DB with ID:", doc.id)
         except Exception as e:
             db.rollback()
             raise DocumentSaveFailed(details=str(e))
@@ -80,13 +78,12 @@ class SessionService:
         try:
             db.commit()
             db.refresh(doc)
-            print("Created session with ID:", session.id)
         except Exception as e:
             db.rollback()
             raise SessionCreationFailed(details=str(e))
 
         # store in vector db
-        Rag.store(RagStore(doc_id=int(doc.id), doc_key=str(doc.key)))
+        Rag.store(input_data=RagStore(doc_id=int(doc.id), doc_key=str(doc.key), doc_type=doc.content_type))
 
         # generate session name in background
         background_tasks.add_task(
@@ -105,13 +102,18 @@ class SessionService:
     def chat(session_id: str, user_id: int, message: str, db: db_session):
         session = (
             db.query(Session)
+            .options(joinedload(Session.document))
             .filter(Session.session_token == session_id, Session.user_id == user_id)
             .first()
         )
         if not session:
             raise SessionNotFound(session_id=session_id)
 
-        input_data = RagQuery(query=message, doc_id=int(session.document_id))
+        input_data = RagQuery(
+            query=message,
+            doc_id=int(session.document_id),
+            doc_type=session.document.content_type,
+        )
 
         # get last two chats (one chat of user and other of assistance)
         latest_chats = (
@@ -134,6 +136,13 @@ class SessionService:
 
         try:
             response = Rag.query(input_data)
+        except Exception as e:
+            raise RagQueryFailed(details=str(e))
+        
+        try:
+            highlight_text = Rag.extract_text_from_doc(
+                ans=str(response), doc_id=session.session_token
+            )
         except Exception as e:
             raise RagQueryFailed(details=str(e))
 
@@ -159,7 +168,17 @@ class SessionService:
             db.rollback()
             raise ChatSaveFailed(details=str(e))
 
-        return {"response": response}
+        return {
+            "response": response,
+            "highlight_text": highlight_text,
+            "document": {
+                "id": int(session.document.id),
+                "key": str(session.document.key),
+                "title": str(session.document.title),
+                "url": str(session.document.url),
+                "content_type": str(session.document.content_type.value),
+            },
+        }
 
     @staticmethod
     def get_sessions(user_id: int, db: db_session, limit: int = 10, offset: int = 0):
@@ -182,6 +201,7 @@ class SessionService:
         # First, find the session by session_token (UUID string)
         session = (
             db.query(Session)
+            .options(joinedload(Session.document))
             .filter(Session.session_token == session_id, Session.user_id == user_id)
             .first()
         )

@@ -1,28 +1,25 @@
 from typing import List
-from chromadb.api.types import EmbeddingFunction, Documents
-from langchain_huggingface import HuggingFaceEmbeddings
+from chromadb.api.types import EmbeddingFunction, Documents, Embeddings
+from fastembed import TextEmbedding
+
+MODEL_NAME = "BAAI/bge-small-en-v1.5"
 
 
-def embedding_function():
-    return HuggingFaceEmbeddings(
-        model_name="BAAI/bge-small-en",
-        model_kwargs={"device": "cpu"},
-        encode_kwargs={"normalize_embeddings": True},
-    )
+class FastEmbedFunction(EmbeddingFunction):
+    def __init__(self, model_name: str = MODEL_NAME):
+        self._model = TextEmbedding(model_name=model_name)
+
+    def __call__(self, input: Documents) -> Embeddings:
+        embeddings = list(self._model.embed(input))
+        return [e.tolist() for e in embeddings]
+
+    def embed_documents(self, texts: List[str]) -> Embeddings:
+        embeddings = list(self._model.embed(texts))
+        return [e.tolist() for e in embeddings]
 
 
-def generate_embeddings(chunk_data: List[str]) -> list[list[float]]:
-    hf = embedding_function()
-    vec = hf.embed_documents(chunk_data)
-    return vec
+fast_embed = FastEmbedFunction()
 
 
-class HuggingFaceEmbeddingAdapter(EmbeddingFunction):
-    def __init__(self, hf_embeddings):
-        self.hf_embeddings = hf_embeddings
-
-    def __call__(self, input: Documents) -> list[list[float]]:
-        return self.hf_embeddings.embed_documents(input)
-
-
-HuggingFaceAdapter = HuggingFaceEmbeddingAdapter(embedding_function())
+def generate_embeddings(chunk_data: List[str]) -> Embeddings:
+    return fast_embed.embed_documents(chunk_data)

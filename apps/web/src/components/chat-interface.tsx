@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
 import { Send, User, Bot, Loader2 } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
@@ -19,6 +19,9 @@ interface ChatInterfaceProps {
   documentName?: string;
   sessionName?: string;
   docUrl?: string;
+  onLoadMore?: () => void;
+  isLoadingMore?: boolean;
+  hasMore?: boolean;
 }
 
 export function ChatInterface({
@@ -28,18 +31,71 @@ export function ChatInterface({
   documentName,
   sessionName,
   docUrl,
+  onLoadMore,
+  isLoadingMore,
+  hasMore,
 }: ChatInterfaceProps) {
   const [input, setInput] = useState("");
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const messagesContainerRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
+  const prevScrollHeightRef = useRef<number>(0);
+  const isInitialLoadRef = useRef(true);
+  const prevMessageCountRef = useRef(0);
 
-  const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  };
+  // Scroll to bottom on initial load and when new messages arrive at the bottom
+  useEffect(() => {
+    if (isInitialLoadRef.current && messages.length > 0) {
+      // Initial load — scroll to bottom immediately
+      messagesEndRef.current?.scrollIntoView();
+      isInitialLoadRef.current = false;
+      prevMessageCountRef.current = messages.length;
+      return;
+    }
+
+    const container = messagesContainerRef.current;
+    if (!container) return;
+
+    // If older messages were prepended (loaded via scroll-up), preserve scroll position
+    if (prevScrollHeightRef.current > 0) {
+      const newScrollHeight = container.scrollHeight;
+      const diff = newScrollHeight - prevScrollHeightRef.current;
+      if (diff > 0) {
+        // Let native scroll anchoring handle this, but keep a tiny adjustment if needed
+        // container.scrollTop += diff; 
+      }
+      prevScrollHeightRef.current = 0;
+      prevMessageCountRef.current = messages.length;
+      return;
+    }
+
+    // New messages added at the bottom (user sent or received) — scroll to bottom
+    if (messages.length > prevMessageCountRef.current) {
+      messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    }
+    prevMessageCountRef.current = messages.length;
+  }, [messages]);
+
+  // Scroll-up detection for loading older messages
+  const handleScroll = useCallback(() => {
+    const container = messagesContainerRef.current;
+    if (!container) return;
+    if (!onLoadMore || !hasMore || isLoadingMore) return;
+    if (isInitialLoadRef.current) return;
+
+    if (container.scrollTop <= 100) {
+      prevScrollHeightRef.current = container.scrollHeight;
+      onLoadMore();
+    }
+  }, [onLoadMore, hasMore, isLoadingMore]);
 
   useEffect(() => {
-    scrollToBottom();
-  }, [messages]);
+    const container = messagesContainerRef.current;
+    if (!container) return;
+
+    container.addEventListener("scroll", handleScroll, { passive: true });
+    return () => container.removeEventListener("scroll", handleScroll);
+  }, [handleScroll]);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -56,14 +112,13 @@ export function ChatInterface({
     }
   };
 
-  const [docWidth, setDocWidth] = useState(50); // Percentage
+  const [docWidth, setDocWidth] = useState(50);
   const isResizingRef = useRef(false);
 
   const startResizing = () => {
     isResizingRef.current = true;
     document.addEventListener("mousemove", handleMouseMove);
     document.addEventListener("mouseup", stopResizing);
-    // Prevent text selection while resizing
     // eslint-disable-next-line react-hooks/immutability
     document.body.style.userSelect = "none";
   };
@@ -79,14 +134,13 @@ export function ChatInterface({
   const handleMouseMove = (e: MouseEvent) => {
     if (!isResizingRef.current) return;
     const newWidth = (e.clientX / window.innerWidth) * 100;
-    // Constrain width between 20% and 80%
     if (newWidth > 20 && newWidth < 80) {
       setDocWidth(newWidth);
     }
   };
 
   return (
-    <div className="flex h-full overflow-hidden">
+    <div className="flex h-full overflow-hidden max-h-full">
       {/* Document Viewer */}
       {docUrl && (
         <>
@@ -111,7 +165,7 @@ export function ChatInterface({
 
       {/* Chat Area */}
       <div 
-        className={cn("flex flex-col h-full", docUrl ? "hidden lg:flex" : "w-full")}
+        className="flex flex-col h-full min-h-0 w-full max-lg:!w-full"
         style={docUrl ? { width: `${100 - docWidth}%` } : undefined}
       >
         {/* Header */}
@@ -130,7 +184,21 @@ export function ChatInterface({
         )}
 
         {/* Messages */}
-        <div className="flex-1 overflow-y-auto p-6 space-y-6">
+        <div ref={messagesContainerRef} className="flex-1 overflow-y-auto p-6 space-y-6">
+          {/* Loading spinner for older messages */}
+          {isLoadingMore && (
+            <div className="flex justify-center py-4">
+              <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+            </div>
+          )}
+
+          {/* All messages loaded indicator */}
+          {hasMore === false && messages.length > 0 && (
+            <p className="text-center text-xs text-muted-foreground py-2">
+              Beginning of conversation
+            </p>
+          )}
+
           {messages.length === 0 ? (
             <div className="h-full flex items-center justify-center text-center">
               <div className="max-w-md">

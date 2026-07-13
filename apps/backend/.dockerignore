@@ -36,3 +36,5 @@ apps/web
 packages/eslint-config
 packages/typescript-config
 packages/ui
+
+chroma-data/

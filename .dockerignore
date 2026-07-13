@@ -33,9 +33,3 @@ node_modules
 # Environment
 .env
 .env.local
-
-# Other
-apps/web
-packages/eslint-config
-packages/typescript-config
-packages/ui

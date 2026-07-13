@@ -17,6 +17,8 @@ class ContentType(str, Enum):
     MARKDOWN = "md"
     DOCX = "docx"
     TEXT = "txt"
+    PPTX = "pptx"
+    XLSX = "xlsx"
 
 
 class Document(Base):

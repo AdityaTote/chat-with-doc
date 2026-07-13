@@ -1,37 +1,68 @@
 "use client";
 
 import { Loader2 } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useState, useMemo, useCallback } from "react";
 import { useParams } from "next/navigation";
 
 import type { ChatMessage } from "@/types/api";
 import { ChatInterface } from "@/components/chat-interface";
-import { useGetSession, useChat } from "@/hooks/useSession";
+import { useInfiniteGetSessionChats, useChat } from "@/hooks/useSession";
+
+const CHAT_PAGE_SIZE = 10;
 
 export default function SessionChatPage() {
   const params = useParams();
   const sessionId = params.sessionId as string;
-  const [messages, setMessages] = useState<ChatMessage[]>([]);
-  
-  const { data: sessionData, isLoading: isFetching } = useGetSession(sessionId);
+  const [localMessages, setLocalMessages] = useState<ChatMessage[]>([]);
+
+  const {
+    data,
+    isLoading: isFetching,
+    fetchNextPage,
+    hasNextPage,
+    isFetchingNextPage,
+  } = useInfiniteGetSessionChats(sessionId, CHAT_PAGE_SIZE);
+
   const { mutateAsync: sendChat, isPending: isLoading } = useChat();
 
-  useEffect(() => {
-    if (sessionData?.success && sessionData.data?.chats) {
-      const chatMessages: ChatMessage[] = sessionData.data.chats
-        .map((chat) => ({
-          role: chat.role,
-          content: chat.message,
-        }))
-        .reverse();
-      // eslint-disable-next-line react-hooks/set-state-in-effect
-      setMessages(chatMessages);
+  // Get session metadata from the first page response
+  const sessionMeta = data?.pages[0]?.data?.session;
+
+  // Build the full message list: paginated (older) messages + locally-added new messages
+  // Backend returns chats in DESC order, so we reverse each page and prepend older pages
+  const paginatedMessages: ChatMessage[] = useMemo(() => {
+    if (!data?.pages) return [];
+
+    // Pages are in fetch order: page 0 = newest, page 1 = older, etc.
+    // Each page's chats are in DESC order. We need chronological (ASC) order.
+    const allPages = [...data.pages].reverse(); // oldest page first
+    return allPages.flatMap(
+      (page) =>
+        (page?.data?.chats ?? [])
+          .slice()
+          .reverse()
+          .map((chat) => ({
+            role: chat.role,
+            content: chat.message,
+          })) as ChatMessage[]
+    );
+  }, [data]);
+
+  // Combine paginated messages with locally-added new messages
+  const messages = useMemo(
+    () => [...paginatedMessages, ...localMessages],
+    [paginatedMessages, localMessages]
+  );
+
+  const handleLoadMore = useCallback(() => {
+    if (hasNextPage && !isFetchingNextPage) {
+      fetchNextPage();
     }
-  }, [sessionData]);
+  }, [hasNextPage, isFetchingNextPage, fetchNextPage]);
 
   const handleSendMessage = async (message: string) => {
     const userMessage: ChatMessage = { role: "user", content: message };
-    setMessages((prev) => [...prev, userMessage]);
+    setLocalMessages((prev) => [...prev, userMessage]);
 
     try {
       const response = await sendChat({ sessionId, message });
@@ -40,20 +71,20 @@ export default function SessionChatPage() {
           role: "assistant",
           content: response.data.response,
         };
-        setMessages((prev) => [...prev, assistantMessage]);
+        setLocalMessages((prev) => [...prev, assistantMessage]);
       } else {
         const errorMessage: ChatMessage = {
           role: "assistant",
           content: "Sorry, I encountered an error processing your request.",
         };
-        setMessages((prev) => [...prev, errorMessage]);
+        setLocalMessages((prev) => [...prev, errorMessage]);
       }
     } catch {
       const errorMessage: ChatMessage = {
         role: "assistant",
         content: "Sorry, I encountered an error. Please try again.",
       };
-      setMessages((prev) => [...prev, errorMessage]);
+      setLocalMessages((prev) => [...prev, errorMessage]);
     }
   };
 
@@ -65,11 +96,9 @@ export default function SessionChatPage() {
     );
   }
 
-  console.log(sessionData?.data)
-
-  const documentName = sessionData?.data?.session?.document_name;
-  const sessionName = sessionData?.data?.session?.title ?? undefined;
-  const docUrl = sessionData?.data?.session?.document_url;
+  const documentName = sessionMeta?.document_name;
+  const sessionName = sessionMeta?.title ?? undefined;
+  const docUrl = sessionMeta?.document_url;
 
   return (
     <ChatInterface
@@ -79,6 +108,9 @@ export default function SessionChatPage() {
       documentName={documentName}
       sessionName={sessionName}
       docUrl={docUrl}
+      onLoadMore={handleLoadMore}
+      isLoadingMore={isFetchingNextPage}
+      hasMore={hasNextPage}
     />
   );
 }

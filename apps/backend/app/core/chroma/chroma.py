@@ -1,7 +1,7 @@
 import chromadb
 
 from app.config import Config
-from app.core.utils.rag import HuggingFaceAdapter
+from app.core.utils.rag import fast_embed
 
 
 class ChromaClient:
@@ -23,7 +23,7 @@ class ChromaClient:
         if self._client:
             return self._client.create_collection(
                 name=name,
-                embedding_function=HuggingFaceAdapter,
+                embedding_function=fast_embed,
                 metadata={
                     "description": "Document collection for RAG-based chat system",
                     "project": "rag-docs",
@@ -38,7 +38,7 @@ class ChromaClient:
             try:
                 collection = self._client.get_collection(
                     name="docs",
-                    embedding_function=HuggingFaceAdapter,
+                    embedding_function=fast_embed,
                 )
                 return collection
             except Exception:

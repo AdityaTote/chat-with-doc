@@ -1,16 +1,81 @@
 "use client";
 
+import { useEffect, useRef, useCallback, useMemo, useState } from "react";
 import Link from "next/link";
-import { FileText, MessageSquare, Calendar, Loader2, FolderOpen } from "lucide-react";
+import {
+  FileText,
+  MessageSquare,
+  Calendar,
+  Loader2,
+  FolderOpen,
+} from "lucide-react";
 import { Card } from "@/components/ui/card";
-import { useGetSessions } from "@/hooks/useSession";
+import { useInfiniteGetSessions } from "@/hooks/useSession";
 import type { Session } from "@/types/api";
 import { AxiosError } from "axios";
 
+const PAGE_SIZE = 10;
+
 export default function SessionsPage() {
-  const { data, isLoading, error } = useGetSessions();
-  
-  const sessions: Session[] = data?.data?.sessions ?? [];
+  const {
+    data,
+    isLoading,
+    error,
+    fetchNextPage,
+    hasNextPage,
+    isFetchingNextPage,
+  } = useInfiniteGetSessions(PAGE_SIZE);
+
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
+  const prevScrollHeightRef = useRef<number>(0);
+  const [hasInitialized, setHasInitialized] = useState(false);
+
+  // Flatten all pages into a single sessions array
+  const sessions: Session[] = useMemo(
+    () => data?.pages.flatMap((page) => page?.data?.sessions ?? []) ?? [],
+    [data]
+  );
+
+  // Mark as initialized after first data load
+  useEffect(() => {
+    if (sessions.length > 0 && !hasInitialized) {
+      setHasInitialized(true);
+    }
+  }, [sessions, hasInitialized]);
+
+  // Preserve scroll position after prepending older sessions
+  useEffect(() => {
+    const container = scrollContainerRef.current;
+    if (!container || prevScrollHeightRef.current === 0) return;
+
+    const newScrollHeight = container.scrollHeight;
+    const diff = newScrollHeight - prevScrollHeightRef.current;
+    if (diff > 0) {
+      container.scrollTop += diff;
+    }
+    prevScrollHeightRef.current = 0;
+  }, [sessions]);
+
+  // Scroll event handler — fetch older sessions when scrolled near top
+  const handleScroll = useCallback(() => {
+    const container = scrollContainerRef.current;
+    if (!container || !hasInitialized) return;
+    if (!hasNextPage || isFetchingNextPage) return;
+
+    // Trigger when within 100px of the top
+    if (container.scrollTop <= 100) {
+      prevScrollHeightRef.current = container.scrollHeight;
+      fetchNextPage();
+    }
+  }, [hasInitialized, hasNextPage, isFetchingNextPage, fetchNextPage]);
+
+  useEffect(() => {
+    const container = scrollContainerRef.current;
+    if (!container) return;
+
+    container.addEventListener("scroll", handleScroll, { passive: true });
+    return () => container.removeEventListener("scroll", handleScroll);
+  }, [handleScroll]);
 
   const formatDate = (dateString: string) => {
     return new Date(dateString).toLocaleDateString("en-US", {
@@ -22,8 +87,6 @@ export default function SessionsPage() {
     });
   };
 
-
-
   if (isLoading) {
     return (
       <div className="flex-1 flex items-center justify-center">
@@ -33,7 +96,7 @@ export default function SessionsPage() {
   }
 
   return (
-    <div className="flex-1 overflow-y-auto p-6">
+    <div ref={scrollContainerRef} className="flex-1 overflow-y-auto p-6">
       <div className="max-w-4xl mx-auto">
         <div className="mb-8">
           <h1 className="text-2xl font-bold mb-2">Chat History</h1>
@@ -42,11 +105,14 @@ export default function SessionsPage() {
           </p>
         </div>
 
-        {error && !(error instanceof AxiosError && error.response?.status === 404) && (
-          <div className="p-4 rounded-lg bg-destructive/10 text-destructive mb-6">
-            {error instanceof Error ? error.message : "Failed to load sessions"}
-          </div>
-        )}
+        {error &&
+          !(error instanceof AxiosError && error.response?.status === 404) && (
+            <div className="p-4 rounded-lg bg-destructive/10 text-destructive mb-6">
+              {error instanceof Error
+                ? error.message
+                : "Failed to load sessions"}
+            </div>
+          )}
 
         {sessions.length === 0 ? (
           <div className="text-center py-16">
@@ -65,6 +131,20 @@ export default function SessionsPage() {
           </div>
         ) : (
           <div className="space-y-3">
+            {/* Loading spinner for fetching older sessions */}
+            {isFetchingNextPage && (
+              <div className="flex justify-center py-4">
+                <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+              </div>
+            )}
+
+            {/* Indicator when all sessions have been loaded */}
+            {!hasNextPage && sessions.length >= PAGE_SIZE && (
+              <p className="text-center text-xs text-muted-foreground py-2">
+                All sessions loaded
+              </p>
+            )}
+
             {sessions.map((session) => (
               <Link
                 key={session.id}
@@ -82,7 +162,7 @@ export default function SessionsPage() {
                           DOC
                         </span>
                       </div>
-                        {session.title || "Untitled Session"}
+                      {session.title || "Untitled Session"}
                       <div className="flex items-center gap-1 text-sm text-muted-foreground mt-1">
                         <Calendar className="h-3.5 w-3.5" />
                         <span>{formatDate(session.created_at)}</span>

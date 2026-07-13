@@ -1,3 +1,5 @@
+import logging
+
 from sqlalchemy.orm import Session
 
 from app.database.models import User
@@ -17,11 +19,13 @@ class AuthService:
     def signup(input_data: AuthSchema, db: Session):
         # check user exist with current email
         if db.query(User).filter(User.email == input_data.email).first():
+            logging.warning(f"user already register with email: {input_data.email}")
             raise EmailAlreadyRegistered(email=input_data.email)
 
         # hash password
         hash_pass = security.hash_text(password=input_data.password)
         if not hash_pass:
+            logging.warning("incorrect password")
             raise PasswordHashFailed()
 
         # store in db
@@ -32,14 +36,17 @@ class AuthService:
             db.refresh(user)
         except Exception as e:
             db.rollback()
+            logging.error(f"unable to create user in database for user {input_data.email}")
             raise ValueError(f"Failed to create user: {str(e)}")
 
         # generate tokens
         token = security.generate_token(user_data=JwtPayload(user_id=int(user.id)))
         if not token:
+            logging.warning(f"unable to generate access token for user {input_data.email}")
             raise TokenGenerationFailed()
 
         user_response = UserResponse.model_validate(user)
+        logging.info(f"user with {input_data.email}, successfully signup to the platform")
         return {"user": user_response.model_dump(), "token": token}
 
     @staticmethod
@@ -47,6 +54,7 @@ class AuthService:
         # check user in db
         user = db.query(User).filter(User.email == input_data.email).first()
         if not user:
+            logging.warning(f"user with {input_data.email}, does not found")
             raise UserNotFound(email=input_data.email)
 
         # match the password
@@ -54,6 +62,7 @@ class AuthService:
             password=input_data.password, hash_password=str(user.password)
         )
         if not check_pass:
+            logging.warning(f"user with {input_data.email}, password does not match")
             raise InvalidCredentials()
 
         # generate token
@@ -61,8 +70,10 @@ class AuthService:
             user_data=JwtPayload(user_id=int(user.id))  # type: ignore
         )
         if not token:
+            logging.warning(f"user with {input_data.email}, failed to generate access token")
             raise TokenGenerationFailed()
-
+        
+        logging.info(f"user with {input_data.email}, successfully signin to the platform")
         return {
             "user": {
                 "id": user.id,
